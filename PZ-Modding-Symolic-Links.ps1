@@ -39,18 +39,33 @@ $installDir = $steamKey.GetValue("InstallPath")
 #Locate "libraryfolders.vdf" file
 $libraryFoldersPath = Join-Path -Path $installDir -ChildPath "steamapps\libraryfolders.vdf"
 if (-not (Test-Path $libraryFoldersPath)) {
-    #If file does not exit, Exit
-    Write-Host "Could not find libraryfolders.vdf in $steamDir" -ForegroundColor Red
+    #If file does not exist, Exit
+    Write-Host "Could not find libraryfolders.vdf in $installDir" -ForegroundColor Red
     Exit
 }
 
 #Get the library folders from the ".vdf" file
 $libraryFolders = Get-Content $libraryFoldersPath | Where-Object { $_ -match '^\s*"\d+"\s*"' } | ForEach-Object { ($_ -split '\t')[3].Trim('"') }
-#Attach all steamapps for workshops checking
-$libraryFolders += Join-Path -Path $installDir -ChildPath "steamapps"
+#Since SteamCMD is seperate and potentially in it's own folder we need to call it seperately
+$SteamCMDLocate = Get-Content $libraryFoldersPath
+#Since in the .vdf all libraries will show so we want to take out all the others except "SteamCMD", IF used
+$SteamCMDPaths = [Regex]::Matches($SteamCMDLocate, '"path"\s*"(.+?)"') | ForEach-Object {$_.Groups[1].Value} | Where-Object {$_ -like "*\\SteamCMD"}
+if (-not $SteamCMDPaths) {
+    #If SteamCMD is not found, ignore
+    Write-Host "SteamCMD folder not found... ignoring" -ForegroundColor Red
+}
+else {
+    Write-Host "SteamCMD = $SteamCMDPaths"
+    #Use the first SteamCMD path found (in case of multiple installations)
+    $SteamCMDPath = $SteamCMDPaths.Trim([char]'\')
+}
+
+#Attach SteamCMD folder for workshops checking
+$libraryFolders += Join-Path -Path $SteamCMDPath -ChildPath "steamapps"
 
 #Set ZB path with current logged in user
 $zomboidPath = "$userDir\zomboid\mods"
+
 #Now check to see if that path exists
 $checkZBPath = Test-Path -Path $zomboidPath
 if (-not $checkZBPath)
@@ -58,13 +73,14 @@ if (-not $checkZBPath)
     #No ZB path detected... Exit
     Write-Host "zomboid\mods Folder not found"
     #Debug user
-    #Write-Host "Current user path: '$zomboidPath'"
+    Write-Host "Current user path: '$zomboidPath'"
     Exit
 }
 
 #Check each library folder in steam for "108600"
 foreach ($library in $libraryFolders) {
     $zomboidFolder = Join-Path $library 'workshop\content\108600'
+    Write-Host "The following workshop folders are: $zomboidFolder"
     if (Test-Path $zomboidFolder) {
         #If 108600 is found in the workshop folder, move onto the next step
         Write-Host "zomboid Workshop Found in '$zomboidFolder'"
