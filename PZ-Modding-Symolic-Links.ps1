@@ -1,4 +1,4 @@
-#This PS script is for "Project Zomboid" and symbolic linking folders for server modding
+#This PS script is for "Project zomboid" and symbolic linking folders for server modding
 #Hide console
 function Show-Console
 {
@@ -50,13 +50,13 @@ $libraryFolders = Get-Content $libraryFoldersPath | Where-Object { $_ -match '^\
 $libraryFolders += Join-Path -Path $installDir -ChildPath "steamapps"
 
 #Set ZB path with current logged in user
-$zomboidPath = "$userDir\.Zomboid\mods"
+$zomboidPath = "$userDir\zomboid\mods"
 #Now check to see if that path exists
 $checkZBPath = Test-Path -Path $zomboidPath
 if (-not $checkZBPath)
 {
     #No ZB path detected... Exit
-    Write-Host ".Zomboid\mods Folder not found"
+    Write-Host "zomboid\mods Folder not found"
     #Debug user
     #Write-Host "Current user path: '$zomboidPath'"
     Exit
@@ -67,17 +67,17 @@ foreach ($library in $libraryFolders) {
     $zomboidFolder = Join-Path $library 'workshop\content\108600'
     if (Test-Path $zomboidFolder) {
         #If 108600 is found in the workshop folder, move onto the next step
-        Write-Host "Zomboid Workshop Found in '$zomboidFolder'"
+        Write-Host "zomboid Workshop Found in '$zomboidFolder'"
         break
     }
 }
 if (-not $zomboidFolder) {
     #If 108600 is not found, Exit
-    Write-Host "Could not find Zomboid workshop folder in any Steam library" -ForegroundColor Red
+    Write-Host "Could not find zomboid workshop folder in any Steam library" -ForegroundColor Red
     Exit
 }
 
-#Symbolic link each mod folder to the Zomboid mods folder
+#Symbolic link each mod folder to the zomboid mods folder
 foreach ($folder in $libraryFolders) {
     #Set folder to workshop and the game ID "108600"
     $modPath = Join-Path $folder "workshop\content\108600"
@@ -88,7 +88,7 @@ foreach ($folder in $libraryFolders) {
             #If Directory passes checks -> proceed
             if (Test-Path $modDir) {
                 Get-ChildItem -Path $modDir -Directory | ForEach-Object {
-                    #For each folder -> symbolic link to "$userDir\.Zomboid\mods"
+                    #For each folder -> symbolic link to "$userDir\zomboid\mods"
                     $target = Join-Path $zomboidPath $_.Name
                     if (-not (Test-Path $target)) {
                         New-Item -ItemType SymbolicLink -Path $target -Target $modDir
