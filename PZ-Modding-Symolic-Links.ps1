@@ -38,7 +38,8 @@ $installDir = $steamKey.GetValue("InstallPath")
 
 #Locate "libraryfolders.vdf" file
 $libraryFoldersPath = Join-Path -Path $installDir -ChildPath "steamapps\libraryfolders.vdf"
-if (-not (Test-Path $libraryFoldersPath)) {
+if (-not (Test-Path $libraryFoldersPath)) 
+{
     #If file does not exist, Exit
     Write-Host "Could not find libraryfolders.vdf in $installDir" -ForegroundColor Red
     Exit
@@ -50,11 +51,13 @@ $libraryFolders = Get-Content $libraryFoldersPath | Where-Object { $_ -match '^\
 $SteamCMDLocate = Get-Content $libraryFoldersPath
 #Since in the .vdf all libraries will show so we want to take out all the others except "SteamCMD", IF used
 $SteamCMDPaths = [Regex]::Matches($SteamCMDLocate, '"path"\s*"(.+?)"') | ForEach-Object {$_.Groups[1].Value} | Where-Object {$_ -like "*\\SteamCMD"}
-if (-not $SteamCMDPaths) {
+if (-not $SteamCMDPaths) 
+{
     #If SteamCMD is not found, ignore
     Write-Host "SteamCMD folder not found... ignoring" -ForegroundColor Red
 }
-else {
+else 
+{
     Write-Host "SteamCMD = $SteamCMDPaths"
     #Use the first SteamCMD path found (in case of multiple installations)
     $SteamCMDPath = $SteamCMDPaths.Trim([char]'\')
@@ -78,39 +81,49 @@ if (-not $checkZBPath)
 }
 
 #Check each library folder in steam for "108600"
-foreach ($library in $libraryFolders) {
+foreach ($library in $libraryFolders) 
+{
     $zomboidFolder = Join-Path $library 'workshop\content\108600'
     Write-Host "The following workshop folders are: $zomboidFolder"
-    if (Test-Path $zomboidFolder) {
+    if (Test-Path $zomboidFolder) 
+    {
         #If 108600 is found in the workshop folder, move onto the next step
         Write-Host "zomboid Workshop Found in '$zomboidFolder'"
         break
     }
 }
-if (-not $zomboidFolder) {
+if (-not $zomboidFolder) 
+{
     #If 108600 is not found, Exit
     Write-Host "Could not find zomboid workshop folder in any Steam library" -ForegroundColor Red
     Exit
 }
 
 #Symbolic link each mod folder to the zomboid mods folder
-foreach ($folder in $libraryFolders) {
+foreach ($folder in $libraryFolders) 
+{
     #Set folder to workshop and the game ID "108600"
     $modPath = Join-Path $folder "workshop\content\108600"
-    if (Test-Path $modPath) {
+    if (Test-Path $modPath) 
+    {
         #For each mod folder inside 108600 (It ignores the ModID's)
-        Get-ChildItem -Path $modPath -Directory | ForEach-Object {
+        Get-ChildItem -Path $modPath -Directory | ForEach-Object 
+        {
             $modDir = Join-Path $_.FullName "Mods"
             #If Directory passes checks -> proceed
-            if (Test-Path $modDir) {
-                Get-ChildItem -Path $modDir -Directory | ForEach-Object {
+            if (Test-Path $modDir) 
+            {
+                Get-ChildItem -Path $modDir -Directory | ForEach-Object 
+                {
                     #For each folder -> symbolic link to "$userDir\zomboid\mods"
                     $target = Join-Path $zomboidPath $_.Name
-                    if (-not (Test-Path $target)) {
-                        New-Item -ItemType SymbolicLink -Path $target -Target $modDir
+                    if (-not (Test-Path $target)) 
+                    {
+                        New-Item -ItemType SymbolicLink -Path $target -Target $_.FullName
                     }
                     #For duplicates -> Ignore 
-                    else {
+                    else 
+                    {
                         Write-Output "Symbolic link already exists for $($_.Name). Skipping."
                     }
                 }
