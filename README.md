@@ -6,6 +6,7 @@ PS script is for "Project Zomboid", it is supposed to symbolic link steam worksh
 
 2.
 A. If you want to use the PS1 file, open a powershell console (Or Terminal) with Administrative rights, then locate the file and then type ".\PZ-Modding-Symolic-Links.ps1"
+
 B. If you want to use the EXE file, right click and run as administrator
 
 3. Check that the links have appeared in "C:\Users\ACCOUNT\.Zomboid\mods", I have done lots of testing to make sure it did work but sometimes a messy mod can cause an issue.
