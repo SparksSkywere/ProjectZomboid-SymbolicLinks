@@ -31,6 +31,8 @@ show-console -show
 
 #Get the UserDirectory
 $userDir = "$env:UserProfile"
+#Debug
+#Write-Host "$userDir"
 
 #Check Steams install path via Regedit
 $steamKey = Get-Item -Path "HKLM:\SOFTWARE\Wow6432Node\Valve\Steam"
@@ -107,14 +109,12 @@ foreach ($folder in $libraryFolders)
     if (Test-Path $modPath) 
     {
         #For each mod folder inside 108600 (It ignores the ModID's)
-        Get-ChildItem -Path $modPath -Directory | ForEach-Object 
-        {
+        Get-ChildItem -Path $modPath -Directory | ForEach-Object {
             $modDir = Join-Path $_.FullName "Mods"
             #If Directory passes checks -> proceed
             if (Test-Path $modDir) 
             {
-                Get-ChildItem -Path $modDir -Directory | ForEach-Object 
-                {
+                Get-ChildItem -Path $modDir -Directory | ForEach-Object {
                     #For each folder -> symbolic link to "$userDir\zomboid\mods"
                     $target = Join-Path $zomboidPath $_.Name
                     if (-not (Test-Path $target)) 
