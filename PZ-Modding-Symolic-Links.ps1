@@ -108,20 +108,23 @@ foreach ($folder in $libraryFolders)
     $modPath = Join-Path $folder "workshop\content\108600"
     if (Test-Path $modPath) 
     {
-        #For each mod folder inside 108600 (It ignores the ModID's)
+        # For each mod folder inside 108600 (It ignores the ModID's)
         Get-ChildItem -Path $modPath -Directory | ForEach-Object {
             $modDir = Join-Path $_.FullName "Mods"
-            #If Directory passes checks -> proceed
-            if (Test-Path $modDir) 
+            # If Directory passes checks -> proceed
+            if (Test-Path -LiteralPath $modDir) 
             {
                 Get-ChildItem -Path $modDir -Directory | ForEach-Object {
-                    #For each folder -> symbolic link to "$userDir\zomboid\mods"
+                    # For each folder -> symbolic link to "$userDir\zomboid\mods"
                     $target = Join-Path $zomboidPath $_.Name
-                    if (-not (Test-Path $target)) 
+                    $source = Get-Item -LiteralPath "$($_.FullName)"
+                    # Escape square brackets in folder names
+                    $target = $target -replace '\[', '`[' -replace '\]', '`]'
+                    if (-not (Test-Path $target))
                     {
-                        New-Item -ItemType SymbolicLink -Path $target -Target $_.FullName
-                    }
-                    #For duplicates -> Ignore 
+                        New-Item -ItemType SymbolicLink -Path $target -Target $source -Force
+                    }                    
+                    # For duplicates -> Ignore 
                     else 
                     {
                         Write-Output "Symbolic link already exists for $($_.Name). Skipping."
