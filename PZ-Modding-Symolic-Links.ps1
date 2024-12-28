@@ -134,7 +134,7 @@ if (-not (Test-Path -Path $zomboidPath))
 }
 # Check each library folder in Steam for "108600"
 $zomboidFolder = $null
-foreach ($library in $validLibraryFolders) 
+foreach ($library in $validLibraryFolders)
 {
     $folder = Join-Path $library 'workshop\content\108600'
     Write-Host "Checking workshop folder: $folder"
@@ -146,7 +146,7 @@ foreach ($library in $validLibraryFolders)
     }
 }
 
-if (-not $zomboidFolder) 
+if (-not $zomboidFolder)
 {
     #If 108600 is not found, Exit
     Write-Host "Could not find zomboid workshop folder in any Steam library" -ForegroundColor Red
@@ -156,36 +156,39 @@ if (-not $zomboidFolder)
 # Symbolic link each mod folder
 $skippedLinks = 0
 $newLinks = 0
-foreach ($folder in $validLibraryFolders) 
+foreach ($folder in $validLibraryFolders)
 {
     $modPath = Join-Path $folder "workshop\content\108600"
-    if (Test-Path $modPath) 
+    if (Test-Path $modPath)
     {
-        Get-ChildItem -Path $modPath -Directory | ForEach-Object {
-            $modDir = Join-Path $_.FullName "Mods"
+        # Get all directories under workshop content
+        Get-ChildItem -Path $modPath -Recurse -Directory | Where-Object { $_.Name -match "(?i)^mods$" } | ForEach-Object {
+            $modDir = $_.FullName
+            # Inside your loop where you handle each mod folder
             if (Test-Path -LiteralPath $modDir) 
             {
                 Get-ChildItem -Path $modDir -Directory | ForEach-Object {
-                    $target = Join-Path $zomboidPath $_.Name
-                    $source = Get-Item -LiteralPath $_.FullName
-                    $escapedSource = [System.Management.Automation.WildcardPattern]::Escape($source.FullName)
-                    $escapedTarget = [System.Management.Automation.WildcardPattern]::Escape($target)
-
-                    if (-not (Test-Path -LiteralPath $escapedSource))
-                    {
-                        Write-Host "Skipping missing source path: $escapedSource" -ForegroundColor Yellow
+                    $target = Join-Path $zomboidPath ([System.IO.Path]::GetFileName($_.FullName))
+                    $source = $_.FullName
+                    
+                    # Escape special characters for PowerShell commands
+                    $escapedSourceForCommand = $source -replace '\[', '`[' -replace '\]', '`]'
+                    $escapedTargetForCommand = $target -replace '\[', '`[' -replace '\]', '`]'
+                    
+                    # Use the original path for checking existence
+                    if (-not (Test-Path -LiteralPath $source)) {
+                        Write-Host "Source path not found: $escapedSourceForCommand (Original: $source)" -ForegroundColor Red
                         return
                     }
-
-                    if (Test-Path $escapedTarget)
-                    {
+                    if (Test-Path $target){
                         $skippedLinks++
                         return
                     }
-                    else
-                    {
-                        New-Item -ItemType SymbolicLink -Path $escapedTarget -Target $escapedSource -Force
+                    try {
+                        New-Item -ItemType SymbolicLink -Path $escapedTargetForCommand -Target $escapedSourceForCommand -Force -ErrorAction Stop
                         $newLinks++
+                    } catch {
+                        Write-Host "Failed to create symbolic link for $escapedSourceForCommand to $escapedTargetForCommand. Error: $_" -ForegroundColor Red
                     }
                 }
             }
