@@ -1,4 +1,4 @@
-#This PS script is for "Project zomboid" and symbolic linking folders for server modding
+#This PS script is for "Project Zomboid" and symbolic linking folders for server modding
 #Hide console
 function Show-Console
 {
@@ -29,10 +29,13 @@ function Show-Console
 #To show the console change "-hide" to "-show"
 show-console -show
 
+# Enable Long Paths (requires reboot to take effect)
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1
+
 #Get the UserDirectory
 $userDir = "$env:UserProfile"
 #Debug
-#Write-Host "$userDir"
+Write-Host "Current user directory: $userDir"
 
 #Check Steams install path via Regedit
 $steamKey = Get-Item -Path "HKLM:\SOFTWARE\Wow6432Node\Valve\Steam"
@@ -47,53 +50,102 @@ if (-not (Test-Path $libraryFoldersPath))
     Exit
 }
 
-#Get the library folders from the ".vdf" file
-$libraryFolders = Get-Content $libraryFoldersPath | Where-Object { $_ -match '^\s*"\d+"\s*"' } | ForEach-Object { ($_ -split '\t')[3].Trim('"') }
-#Since SteamCMD is seperate and potentially in it's own folder we need to call it seperately
-$SteamCMDLocate = Get-Content $libraryFoldersPath
-#Since in the .vdf all libraries will show so we want to take out all the others except "SteamCMD", IF used
-$SteamCMDPaths = [Regex]::Matches($SteamCMDLocate, '"path"\s*"(.+?)"') | ForEach-Object {$_.Groups[1].Value} | Where-Object {$_ -like "*\\SteamCMD"}
-if (-not $SteamCMDPaths) 
+#Get the library folders from the ".vdf" file - filter only valid paths
+$libraryFolders = Get-Content $libraryFoldersPath | Where-Object { $_ -match '"path"\s*"(.+?)"' } | ForEach-Object { ($_ -split '"path"\s*"')[1].Trim('"') }
+
+#Verify each library path
+$validLibraryFolders = @()
+foreach ($folder in $libraryFolders) 
 {
-    #If SteamCMD is not found, ignore
-    Write-Host "SteamCMD folder not found... ignoring" -ForegroundColor Red
+    if (Test-Path $folder) 
+    {
+        $validLibraryFolders += $folder
+    } 
+    else 
+    {
+        Write-Host "Invalid library path detected: $folder" -ForegroundColor Yellow
+    }
 }
+
+#Check for Steam Client installation
+$steamClientPaths = @()
+foreach ($folder in $validLibraryFolders) 
+{
+    $possiblePath = Join-Path $folder "steamapps"
+    if (Test-Path $possiblePath) 
+    {
+        $steamClientPaths += $possiblePath
+    }
+}
+
+if (-not $steamClientPaths) 
+{
+    Write-Host "No valid Steam Client installations found." -ForegroundColor Red
+} 
 else 
 {
-    Write-Host "SteamCMD = $SteamCMDPaths"
-    #Use the first SteamCMD path found (in case of multiple installations)
-    $SteamCMDPath = $SteamCMDPaths.Trim([char]'\')
+    Write-Host "Found Steam Client installations in the following directories:`n$($steamClientPaths -join "`n")"
 }
 
-#Attach SteamCMD folder for workshops checking
-$libraryFolders += Join-Path -Path $SteamCMDPath -ChildPath "steamapps"
+# Check for SteamCMD in valid library folders and fallback paths
+$steamCMDPaths = @()
 
-#Set ZB path with current logged in user
-$zomboidPath = "$userDir\zomboid\mods"
-
-#Now check to see if that path exists
-$checkZBPath = Test-Path -Path $zomboidPath
-if (-not $checkZBPath)
+# Check library folders
+foreach ($folder in $validLibraryFolders) 
 {
-    #No ZB path detected... Exit
+    $possiblePath = Join-Path $folder "SteamCMD"
+    if ((Test-Path $possiblePath) -and (Test-Path (Join-Path $possiblePath "steamcmd.exe"))) 
+    {
+        $steamCMDPaths += $possiblePath
+    }
+}
+
+# Check fallback locations
+$fallbackPaths = @("C:\SteamCMD", "D:\SteamCMD")
+foreach ($path in $fallbackPaths) 
+{
+    if ((Test-Path $path) -and (Test-Path (Join-Path $path "steamcmd.exe"))) 
+    {
+        $steamCMDPaths += $path
+    }
+}
+
+if (-not $steamCMDPaths) 
+{
+    Write-Host "No valid SteamCMD installation found." -ForegroundColor Red
+} 
+else 
+{
+    Write-Host "Found SteamCMD in the following directories:`n$($steamCMDPaths -join "`n")"
+    foreach ($path in $steamCMDPaths) 
+    {
+        # Attach SteamCMD folder for workshops checking
+        $validLibraryFolders += Join-Path -Path $path -ChildPath "steamapps"
+    }
+}
+
+# Set Zomboid mods path
+$zomboidPath = "$userDir\zomboid\mods"
+if (-not (Test-Path -Path $zomboidPath))
+{
     Write-Host "zomboid\mods Folder not found"
-    #Debug user
     Write-Host "Current user path: '$zomboidPath'"
     Exit
 }
-
-#Check each library folder in steam for "108600"
-foreach ($library in $libraryFolders) 
+# Check each library folder in Steam for "108600"
+$zomboidFolder = $null
+foreach ($library in $validLibraryFolders) 
 {
-    $zomboidFolder = Join-Path $library 'workshop\content\108600'
-    Write-Host "The following workshop folders are: $zomboidFolder"
-    if (Test-Path $zomboidFolder) 
+    $folder = Join-Path $library 'workshop\content\108600'
+    Write-Host "Checking workshop folder: $folder"
+    if (Test-Path $folder) 
     {
-        #If 108600 is found in the workshop folder, move onto the next step
-        Write-Host "zomboid Workshop Found in '$zomboidFolder'"
+        Write-Host "zomboid Workshop Found in '$folder'"
+        $zomboidFolder = $folder
         break
     }
 }
+
 if (-not $zomboidFolder) 
 {
     #If 108600 is not found, Exit
@@ -101,39 +153,48 @@ if (-not $zomboidFolder)
     Exit
 }
 
-#Symbolic link each mod folder to the zomboid mods folder
-foreach ($folder in $libraryFolders) 
+# Symbolic link each mod folder
+$skippedLinks = 0
+$newLinks = 0
+foreach ($folder in $validLibraryFolders) 
 {
-    #Set folder to workshop and the game ID "108600"
     $modPath = Join-Path $folder "workshop\content\108600"
     if (Test-Path $modPath) 
     {
-        # For each mod folder inside 108600 (It ignores the ModID's)
         Get-ChildItem -Path $modPath -Directory | ForEach-Object {
             $modDir = Join-Path $_.FullName "Mods"
-            # If Directory passes checks -> proceed
             if (Test-Path -LiteralPath $modDir) 
             {
                 Get-ChildItem -Path $modDir -Directory | ForEach-Object {
-                    # For each folder -> symbolic link to "$userDir\zomboid\mods"
                     $target = Join-Path $zomboidPath $_.Name
-                    $source = Get-Item -LiteralPath "$($_.FullName)"
-                    # Escape square brackets in folder names
-                    $target = $target -replace '\[', '`[' -replace '\]', '`]'
-                    if (-not (Test-Path $target))
+                    $source = Get-Item -LiteralPath $_.FullName
+                    $escapedSource = [System.Management.Automation.WildcardPattern]::Escape($source.FullName)
+                    $escapedTarget = [System.Management.Automation.WildcardPattern]::Escape($target)
+
+                    if (-not (Test-Path -LiteralPath $escapedSource))
                     {
-                        New-Item -ItemType SymbolicLink -Path $target -Target $source -Force
-                    }                    
-                    # For duplicates -> Ignore 
-                    else 
+                        Write-Host "Skipping missing source path: $escapedSource" -ForegroundColor Yellow
+                        return
+                    }
+
+                    if (Test-Path $escapedTarget)
                     {
-                        Write-Output "Symbolic link already exists for $($_.Name). Skipping."
+                        $skippedLinks++
+                        return
+                    }
+                    else
+                    {
+                        New-Item -ItemType SymbolicLink -Path $escapedTarget -Target $escapedSource -Force
+                        $newLinks++
                     }
                 }
             }
         }
     }
 }
-#End
-Exit
+
+Write-Host "Symbolic Link Creation Summary:"
+Write-Host " - New Links Created: $newLinks"
+Write-Host " - Skipped Existing Links: $skippedLinks"
+Pause
 #Made by Chris Masters
