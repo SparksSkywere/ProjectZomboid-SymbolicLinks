@@ -27,7 +27,7 @@ function Show-Console
 }
 #End of powershell console hiding
 #To show the console change "-hide" to "-show"
-show-console -show
+Show-Console -Show
 
 # Enable Long Paths (requires reboot to take effect)
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1
@@ -36,6 +36,20 @@ Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name
 $userDir = "$env:UserProfile"
 #Debug
 Write-Host "Current user directory: $userDir"
+
+# Define Debug function
+function Debug {
+    param (
+        [string]$Message,
+        [string]$Type = "Info"
+    )
+    $color = switch ($Type) {
+        "Error" { "Red" }
+        "Warning" { "Yellow" }
+        default { "White" }
+    }
+    Write-Host $Message -ForegroundColor $color
+}
 
 #Check Steams install path via Regedit
 $steamKey = Get-Item -Path "HKLM:\SOFTWARE\Wow6432Node\Valve\Steam"
@@ -156,6 +170,12 @@ if (-not $zomboidFolder)
 # Symbolic link each mod folder
 $skippedLinks = 0
 $newLinks = 0
+$failedLinks = 0
+$skippedMods = @()
+$newLinkMods = @()
+$failedLinkMods = @()
+
+# The main chunk of this script to display all outputs
 foreach ($folder in $validLibraryFolders)
 {
     $modPath = Join-Path $folder "workshop\content\108600"
@@ -177,18 +197,46 @@ foreach ($folder in $validLibraryFolders)
                     
                     # Use the original path for checking existence
                     if (-not (Test-Path -LiteralPath $source)) {
-                        Write-Host "Source path not found: $escapedSourceForCommand (Original: $source)" -ForegroundColor Red
+                        Debug "Source path not found: $escapedSourceForCommand (Original: $source)" "Error"
+                        $failedLinkMods += @{
+                            'Mod' = [System.IO.Path]::GetFileName($_.FullName)
+                            'Reason' = "Source path not found"
+                        }
+                        $failedLinks++
                         return
                     }
                     if (Test-Path $target){
+                        $skippedMods += @{
+                            'Mod' = [System.IO.Path]::GetFileName($_.FullName)
+                            'Reason' = "Link already exists"
+                        }
                         $skippedLinks++
                         return
                     }
                     try {
                         New-Item -ItemType SymbolicLink -Path $escapedTargetForCommand -Target $escapedSourceForCommand -Force -ErrorAction Stop
+                        $newLinkMods += @{
+                            'Mod' = [System.IO.Path]::GetFileName($_.FullName)
+                        }
                         $newLinks++
                     } catch {
-                        Write-Host "Failed to create symbolic link for $escapedSourceForCommand to $escapedTargetForCommand. Error: $_" -ForegroundColor Red
+                        $errorMessage = $_.Exception.Message
+                        if ($errorMessage -like "*access to the path*") {
+                            Debug "Access denied when creating link for $escapedSourceForCommand to $escapedTargetForCommand. Error: $errorMessage" "Error"
+                        } elseif ($errorMessage -like "*already exists*") {
+                            $skippedMods += @{
+                                'Mod' = [System.IO.Path]::GetFileName($_.FullName)
+                                'Reason' = "Link creation failed due to existing item"
+                            }
+                            Debug "Link creation failed due to existing item at $escapedTargetForCommand. Error: $errorMessage" "Warning"
+                        } else {
+                            Debug "Failed to create symbolic link for $escapedSourceForCommand to $escapedTargetForCommand. Error: $errorMessage" "Error"
+                        }
+                        $failedLinkMods += @{
+                            'Mod' = [System.IO.Path]::GetFileName($_.FullName)
+                            'Reason' = $errorMessage
+                        }
+                        $failedLinks++
                     }
                 }
             }
@@ -196,8 +244,33 @@ foreach ($folder in $validLibraryFolders)
     }
 }
 
+# Output newly created links
+if ($newLinkMods.Count -gt 0) {
+    Write-Host "`nNew Links Created:"
+    foreach ($mod in $newLinkMods) {
+        Write-Host "  - $($mod.Mod)"
+    }
+}
+
+# Output skipped mods
+if ($skippedMods.Count -gt 0) {
+    Write-Host "`nSkipped Mods:"
+    foreach ($mod in $skippedMods) {
+        Write-Host "  - $($mod.Mod): $($mod.Reason)"
+    }
+}
+
+# Output failed links
+if ($failedLinkMods.Count -gt 0) {
+    Write-Host "`nFailed Links:"
+    foreach ($mod in $failedLinkMods) {
+        Write-Host "  - $($mod.Mod): $($mod.Reason)"
+    }
+}
+
 Write-Host "Symbolic Link Creation Summary:"
 Write-Host " - New Links Created: $newLinks"
 Write-Host " - Skipped Existing Links: $skippedLinks"
+Write-Host " - Failed Links: $failedLinks"
 Pause
 #Made by Chris Masters
