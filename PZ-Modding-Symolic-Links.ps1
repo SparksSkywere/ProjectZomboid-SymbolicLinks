@@ -174,6 +174,7 @@ $failedLinks = 0
 $skippedMods = @()
 $newLinkMods = @()
 $failedLinkMods = @()
+$unlinkedWorkshopNumbers = @()
 
 # The main chunk of this script to display all outputs
 foreach ($folder in $validLibraryFolders)
@@ -190,6 +191,7 @@ foreach ($folder in $validLibraryFolders)
                 Get-ChildItem -Path $modDir -Directory | ForEach-Object {
                     $target = Join-Path $zomboidPath ([System.IO.Path]::GetFileName($_.FullName))
                     $source = $_.FullName
+                    $workshopNumber = (Split-Path (Split-Path $modDir -Parent) -Leaf)
                     
                     # Escape special characters for PowerShell commands
                     $escapedSourceForCommand = $source -replace '\[', '`[' -replace '\]', '`]'
@@ -199,6 +201,7 @@ foreach ($folder in $validLibraryFolders)
                     if (-not (Test-Path -LiteralPath $source)) {
                         Debug "Source path not found: $escapedSourceForCommand (Original: $source)" "Error"
                         $failedLinkMods += @{
+                            'WorkshopNumber' = $workshopNumber
                             'Mod' = [System.IO.Path]::GetFileName($_.FullName)
                             'Reason' = "Source path not found"
                         }
@@ -207,6 +210,7 @@ foreach ($folder in $validLibraryFolders)
                     }
                     if (Test-Path $target){
                         $skippedMods += @{
+                            'WorkshopNumber' = $workshopNumber
                             'Mod' = [System.IO.Path]::GetFileName($_.FullName)
                             'Reason' = "Link already exists"
                         }
@@ -216,6 +220,7 @@ foreach ($folder in $validLibraryFolders)
                     try {
                         New-Item -ItemType SymbolicLink -Path $escapedTargetForCommand -Target $escapedSourceForCommand -Force -ErrorAction Stop
                         $newLinkMods += @{
+                            'WorkshopNumber' = $workshopNumber
                             'Mod' = [System.IO.Path]::GetFileName($_.FullName)
                         }
                         $newLinks++
@@ -225,6 +230,7 @@ foreach ($folder in $validLibraryFolders)
                             Debug "Access denied when creating link for $escapedSourceForCommand to $escapedTargetForCommand. Error: $errorMessage" "Error"
                         } elseif ($errorMessage -like "*already exists*") {
                             $skippedMods += @{
+                                'WorkshopNumber' = $workshopNumber
                                 'Mod' = [System.IO.Path]::GetFileName($_.FullName)
                                 'Reason' = "Link creation failed due to existing item"
                             }
@@ -233,11 +239,18 @@ foreach ($folder in $validLibraryFolders)
                             Debug "Failed to create symbolic link for $escapedSourceForCommand to $escapedTargetForCommand. Error: $errorMessage" "Error"
                         }
                         $failedLinkMods += @{
+                            'WorkshopNumber' = $workshopNumber
                             'Mod' = [System.IO.Path]::GetFileName($_.FullName)
                             'Reason' = $errorMessage
                         }
                         $failedLinks++
                     }
+                }
+                
+                # Check for unlinked workshop numbers
+                $workshopNumber = Split-Path (Split-Path $modDir -Parent) -Leaf
+                if (-not (Test-Path $target)) {
+                    $unlinkedWorkshopNumbers += $workshopNumber
                 }
             }
         }
@@ -248,7 +261,7 @@ foreach ($folder in $validLibraryFolders)
 if ($newLinkMods.Count -gt 0) {
     Write-Host "`nNew Links Created:"
     foreach ($mod in $newLinkMods) {
-        Write-Host "  - $($mod.Mod)"
+        Write-Host "$($mod.workshopNumber) - $($mod.Mod)"
     }
 }
 
@@ -256,7 +269,7 @@ if ($newLinkMods.Count -gt 0) {
 if ($skippedMods.Count -gt 0) {
     Write-Host "`nSkipped Mods:"
     foreach ($mod in $skippedMods) {
-        Write-Host "  - $($mod.Mod): $($mod.Reason)"
+        Write-Host "$($mod.workshopNumber) - $($mod.Mod): $($mod.Reason)"
     }
 }
 
@@ -264,7 +277,15 @@ if ($skippedMods.Count -gt 0) {
 if ($failedLinkMods.Count -gt 0) {
     Write-Host "`nFailed Links:"
     foreach ($mod in $failedLinkMods) {
-        Write-Host "  - $($mod.Mod): $($mod.Reason)"
+        Write-Host "$($mod.workshopNumber) - $($mod.Mod): $($mod.Reason)"
+    }
+}
+
+# Output unlinked workshop numbers
+if ($unlinkedWorkshopNumbers.Count -gt 0) {
+    Write-Host "`nUnlinked Workshop Numbers:"
+    foreach ($number in $unlinkedWorkshopNumbers) {
+        Write-Host "$number"
     }
 }
 
@@ -272,5 +293,6 @@ Write-Host "Symbolic Link Creation Summary:"
 Write-Host " - New Links Created: $newLinks"
 Write-Host " - Skipped Existing Links: $skippedLinks"
 Write-Host " - Failed Links: $failedLinks"
+Write-Host " - Unlinked Workshop Numbers: $($unlinkedWorkshopNumbers.Count)"
 Pause
 #Made by Chris Masters
