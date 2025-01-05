@@ -176,81 +176,91 @@ $newLinkMods = @()
 $failedLinkMods = @()
 $unlinkedWorkshopNumbers = @()
 
+3395592779
+
 # The main chunk of this script to display all outputs
 foreach ($folder in $validLibraryFolders)
 {
-    $modPath = Join-Path $folder "workshop\content\108600"
-    if (Test-Path $modPath)
-    {
+    $modPath = Join-Path $folder 'workshop\content\108600'
+    $appModPath = Join-Path $folder 'content\app_108600'
+    if ((Test-Path $modPath) -or (Test-Path $appModPath)) {
         # Get all directories under workshop content
-        Get-ChildItem -Path $modPath -Recurse -Directory | Where-Object { $_.Name -match "(?i)^mods$" } | ForEach-Object {
-            $modDir = $_.FullName
-            # Inside your loop where you handle each mod folder
-            if (Test-Path -LiteralPath $modDir) 
-            {
-                Get-ChildItem -Path $modDir -Directory | ForEach-Object {
-                    $target = Join-Path $zomboidPath ([System.IO.Path]::GetFileName($_.FullName))
-                    $source = $_.FullName
-                    $workshopNumber = (Split-Path (Split-Path $modDir -Parent) -Leaf)
-                    
-                    # Escape special characters for PowerShell commands
-                    $escapedSourceForCommand = $source -replace '\[', '`[' -replace '\]', '`]'
-                    $escapedTargetForCommand = $target -replace '\[', '`[' -replace '\]', '`]'
-                    
-                    # Use the original path for checking existence
-                    if (-not (Test-Path -LiteralPath $source)) {
-                        Debug "Source path not found: $escapedSourceForCommand (Original: $source)" "Error"
-                        $failedLinkMods += @{
-                            'WorkshopNumber' = $workshopNumber
-                            'Mod' = [System.IO.Path]::GetFileName($_.FullName)
-                            'Reason' = "Source path not found"
+        $pathsToCheck = @()
+        if (Test-Path $modPath) { $pathsToCheck += $modPath }
+        if (Test-Path $appModPath) { $pathsToCheck += $appModPath }
+
+        foreach ($path in $pathsToCheck) {
+            Get-ChildItem -Path $path -Recurse -Directory | Where-Object { $_.Name -match "(?i)^mods$" } | ForEach-Object {
+                $modDir = $_.FullName
+                # Inside your loop where you handle each mod folder
+                if (Test-Path -LiteralPath $modDir) 
+                {
+                    Get-ChildItem -Path $modDir -Directory | ForEach-Object {
+                        $target = Join-Path $zomboidPath ([System.IO.Path]::GetFileName($_.FullName))
+                        $source = $_.FullName
+                        $workshopNumber = (Split-Path (Split-Path $modDir -Parent) -Leaf)
+                        
+                        # Escape special characters for PowerShell commands
+                        $escapedSourceForCommand = $source -replace '\[', '`[' -replace '\]', '`]'
+                        $escapedTargetForCommand = $target -replace '\[', '`[' -replace '\]', '`]'
+                        
+                        # Use the original path for checking existence
+                        if (-not (Test-Path -LiteralPath $source)) {
+                            Debug "Source path not found: $escapedSourceForCommand (Original: $source)" "Error"
+                            $failedLinkMods += @{
+                                'WorkshopNumber' = $workshopNumber
+                                'Mod' = [System.IO.Path]::GetFileName($_.FullName)
+                                'Reason' = "Source path not found"
+                            }
+                            $failedLinks++
+                            return
                         }
-                        $failedLinks++
-                        return
-                    }
-                    if (Test-Path $target){
-                        $skippedMods += @{
-                            'WorkshopNumber' = $workshopNumber
-                            'Mod' = [System.IO.Path]::GetFileName($_.FullName)
-                            'Reason' = "Link already exists"
-                        }
-                        $skippedLinks++
-                        return
-                    }
-                    try {
-                        New-Item -ItemType SymbolicLink -Path $escapedTargetForCommand -Target $escapedSourceForCommand -Force -ErrorAction Stop
-                        $newLinkMods += @{
-                            'WorkshopNumber' = $workshopNumber
-                            'Mod' = [System.IO.Path]::GetFileName($_.FullName)
-                        }
-                        $newLinks++
-                    } catch {
-                        $errorMessage = $_.Exception.Message
-                        if ($errorMessage -like "*access to the path*") {
-                            Debug "Access denied when creating link for $escapedSourceForCommand to $escapedTargetForCommand. Error: $errorMessage" "Error"
-                        } elseif ($errorMessage -like "*already exists*") {
+                        # Check if the link already exists
+                        if (Test-Path $target){
                             $skippedMods += @{
                                 'WorkshopNumber' = $workshopNumber
                                 'Mod' = [System.IO.Path]::GetFileName($_.FullName)
-                                'Reason' = "Link creation failed due to existing item"
+                                'Reason' = "Link already exists"
                             }
-                            Debug "Link creation failed due to existing item at $escapedTargetForCommand. Error: $errorMessage" "Warning"
-                        } else {
-                            Debug "Failed to create symbolic link for $escapedSourceForCommand to $escapedTargetForCommand. Error: $errorMessage" "Error"
+                            $skippedLinks++
+                            return
                         }
-                        $failedLinkMods += @{
-                            'WorkshopNumber' = $workshopNumber
-                            'Mod' = [System.IO.Path]::GetFileName($_.FullName)
-                            'Reason' = $errorMessage
+                        # Create the symbolic link+
+                        try {
+                            New-Item -ItemType SymbolicLink -Path $escapedTargetForCommand -Target $escapedSourceForCommand -Force -ErrorAction Stop
+                            $newLinkMods += @{
+                                'WorkshopNumber' = $workshopNumber
+                                'Mod' = [System.IO.Path]::GetFileName($_.FullName)
+                            }
+                            $newLinks++
+                        } catch {
+                            $errorMessage = $_.Exception.Message
+                            if ($errorMessage -like "*access to the path*") {
+                                Debug "Access denied when creating link for $escapedSourceForCommand to $escapedTargetForCommand. Error: $errorMessage" "Error"
+                            } elseif ($errorMessage -like "*already exists*") {
+                                $skippedMods += @{
+                                    'WorkshopNumber' = $workshopNumber
+                                    'Mod' = [System.IO.Path]::GetFileName($_.FullName)
+                                    'Reason' = "Link creation failed due to existing item"
+                                }
+                                Debug "Link creation failed due to existing item at $escapedTargetForCommand. Error: $errorMessage" "Warning"
+                            } else {
+                                Debug "Failed to create symbolic link for $escapedSourceForCommand to $escapedTargetForCommand. Error: $errorMessage" "Error"
+                            }
+                            $failedLinkMods += @{
+                                'WorkshopNumber' = $workshopNumber
+                                'Mod' = [System.IO.Path]::GetFileName($_.FullName)
+                                'Reason' = $errorMessage
+                            }
+                            $failedLinks++
                         }
-                        $failedLinks++
                     }
-                }
-                
-                # Check for unlinked workshop numbers
-                $workshopNumber = Split-Path (Split-Path $modDir -Parent) -Leaf
-                if (-not (Test-Path $target)) {
-                    $unlinkedWorkshopNumbers += $workshopNumber
+                    
+                    # Check for unlinked workshop numbers
+                    $workshopNumber = Split-Path (Split-Path $modDir -Parent) -Leaf
+                    if (-not (Test-Path $target)) {
+                        $unlinkedWorkshopNumbers += $workshopNumber
+                    }
                 }
             }
         }
